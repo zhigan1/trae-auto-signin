@@ -1,0 +1,48 @@
+name: Trae 每日签到
+
+on:
+  schedule:
+    # UTC 21:00 = 北京时间 05:00（每天凌晨自动签到）
+    - cron: '0 21 * * *'
+  workflow_dispatch:  # 支持在 Actions 页面手动触发
+
+permissions:
+  contents: read
+
+jobs:
+  signin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 检查必需的 Secret
+        run: |
+          if [ -z "${{ secrets.TRAE_CREDENTIALS_BASE64 }}" ]; then
+            echo "::error::缺少 TRAE_CREDENTIALS_BASE64 Secret，请参考 SETUP-GITHUB.md 配置"
+            exit 1
+          fi
+
+      - name: 随机延迟
+        run: |
+          DELAY=$((RANDOM % 60))
+          echo "随机延迟 ${DELAY} 秒，避免集中请求..."
+          sleep $DELAY
+
+      - name: 执行签到
+        env:
+          TRAE_STORAGE_JSON: ${{ runner.temp }}/storage.json
+        run: |
+          echo '${{ secrets.TRAE_CREDENTIALS_BASE64 }}' | base64 -d > "$TRAE_STORAGE_JSON"
+          node signin.js auto
+
+      - name: 记录签到结果
+        if: success()
+        run: echo "✅ 签到流程执行完毕 $(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')"

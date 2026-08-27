@@ -1,0 +1,5 @@
+node_modules/
+*.log
+storage.json
+.DS_Store
+.vs/

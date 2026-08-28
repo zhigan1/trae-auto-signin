@@ -2,8 +2,8 @@ name: Trae 每日签到
 
 on:
   schedule:
-    # UTC 21:00 = 北京时间 05:00（每天凌晨自动签到）
-    - cron: '0 21 * * *'
+    # UTC 22:00 = 北京时间 06:00（每天早晨自动签到）
+    - cron: '0 22 * * *'
   workflow_dispatch:  # 支持在 Actions 页面手动触发
 
 permissions:

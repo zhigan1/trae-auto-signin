@@ -60,7 +60,7 @@ node signin.js auto
 
 1. **Fork 本仓库**
 2. **配置 Secret**：在 Settings -> Secrets 中添加 `TRAE_CREDENTIALS_BASE64`（多账号一行一个）。
-3. **开启 Actions**：工作流每天 **北京时间 05:00** 自动执行签到。
+3. **开启 Actions**：工作流每天 **北京时间 06:00** 自动执行签到。
 
 ## 排错指南
 

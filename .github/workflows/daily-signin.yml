@@ -2,8 +2,8 @@ name: Trae 每日签到
 
 on:
   schedule:
-    # UTC 22:00 = 北京时间 06:00（每天早晨自动签到）
-    - cron: '0 22 * * *'
+    # 按照你的换算：设为 14 对应中国时间 06:00
+    - cron: '0 14 * * *'
   workflow_dispatch:  # 支持在 Actions 页面手动触发
 
 permissions:
@@ -38,6 +38,7 @@ jobs:
 
       - name: 执行签到
         env:
+          TZ: 'Asia/Shanghai'
           TRAE_CREDENTIALS_BASE64: ${{ secrets.TRAE_CREDENTIALS_BASE64 }}
         run: |
           node signin.js auto

@@ -4,7 +4,15 @@
 
 ## 原理
 
-Trae 凭证存储在本地 `%APPDATA%\TRAE SOLO CN\User\globalStorage\storage.json`。
+Trae 凭证存储在本地，具体路径取决于你安装的是哪个产品：
+
+| 产品 | 本地路径 |
+|---|---|
+| **Trae CN**（新版 IDE，3.x） | `%APPDATA%\Trae CN\User\globalStorage\storage.json` |
+| **TRAE SOLO CN**（SOLO 客户端） | `%APPDATA%\TRAE SOLO CN\User\globalStorage\storage.json` |
+
+本地运行时脚本会自动选取两个文件中**修改时间较新**的那个；手动导出 Secret 时请确认选的是你最近登录过的产品，否则会导出过期凭据并报 `NO_SESSION`。
+
 GitHub Actions 运行在云端，将本地凭证 Base64 编码后作为 Secret 传入，脚本会自动解密并调用官方接口完成签到。
 
 ---
@@ -13,22 +21,53 @@ GitHub Actions 运行在云端，将本地凭证 Base64 编码后作为 Secret �
 
 ### 1. 导出本地凭证（Base64）
 
-在安装并登录了 Trae 的电脑上打开终端执行：
+在安装并登录了 Trae 的电脑上打开终端执行。
 
-**PowerShell（推荐，自动复制到剪贴板）：**
+**PowerShell — 自动挑选最新的那个（推荐）：**
 
 ```powershell
+$file = @("$env:APPDATA\Trae CN", "$env:APPDATA\TRAE SOLO CN") |
+    ForEach-Object { Join-Path $_ 'User\globalStorage\storage.json' } |
+    Where-Object { Test-Path $_ } |
+    Sort-Object { (Get-Item $_).LastWriteTime } -Descending |
+    Select-Object -First 1
+if (-not $file) { throw "未找到 storage.json，请先登录 Trae 客户端" }
+$bytes = [IO.File]::ReadAllBytes($file)
+Set-Clipboard ([Convert]::ToBase64String($bytes))
+Write-Host "已复制到剪贴板：$file（$($bytes.Length) 字节）"
+```
+
+**PowerShell — 指定产品（二选一）：**
+
+```powershell
+# Trae CN（新版 IDE）
+$bytes = [IO.File]::ReadAllBytes("$env:APPDATA\Trae CN\User\globalStorage\storage.json")
+Set-Clipboard ([Convert]::ToBase64String($bytes))
+Write-Host "已复制到剪贴板"
+```
+
+```powershell
+# TRAE SOLO CN（SOLO 客户端）
 $bytes = [IO.File]::ReadAllBytes("$env:APPDATA\TRAE SOLO CN\User\globalStorage\storage.json")
 Set-Clipboard ([Convert]::ToBase64String($bytes))
 Write-Host "已复制到剪贴板"
 ```
 
-**CMD：**
+**CMD — 同样按产品二选一：**
 
 ```cmd
+:: Trae CN（新版 IDE）
+certutil -encode "%APPDATA%\Trae CN\User\globalStorage\storage.json" storage.b64
+type storage.b64
+```
+
+```cmd
+:: TRAE SOLO CN（SOLO 客户端）
 certutil -encode "%APPDATA%\TRAE SOLO CN\User\globalStorage\storage.json" storage.b64
 type storage.b64
 ```
+
+> 两个客户端都装过时，最常见的坑是：明明刚登录过，导出的却是另一个产品的旧文件，表现为工作流一直 `NO_SESSION`（code 1001）。用上面的自动挑选命令可以避免。
 
 ---
 
@@ -85,6 +124,8 @@ type storage.b64
 |---|---|---|
 | `NO_AUTH` | 凭证解密失败或未登录 | 本地重新在 Trae 登录后重新导出 Base64 更新 Secret |
 | `NO_SESSION` / 401/403 | Token 登录态已过期 | 重新在 Trae 客户端登录后重新导出凭证更新 Secret |
+| `NO_SESSION`（code 1001） | 导出的是**另一个产品**的旧 `storage.json`（常见于同时装了 Trae CN 与 TRAE SOLO CN） | 对照「原理」里的两条路径，导出最近登录过的那个；本机运行脚本会自动选最新，云端只能靠 Secret |
 | `REFRESH_FAIL` | 无法云端续期 Token | 本地客户端重新登录并重新导出 |
+| `REFRESH_FAIL 响应中无 Token` | 旧版本脚本解析不了 `Result.Result.Token` | 更新到最新脚本 |
 | `server_busy` (9074) | 风控拦截（已通过 Aha Device ID 修复） | 更新最新版本脚本即可解决 |
 | Actions 标记 `❌` | 任意账号签到未成功 | 点击进入该次运行查看具体哪一个账号报错并排查 |

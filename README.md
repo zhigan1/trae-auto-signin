@@ -1,6 +1,6 @@
 # trae-auto-signin
 
-自动领取 **TRAE SOLO CN** 每日签到积分的 Node.js 脚本。
+自动领取 **Trae CN / TRAE SOLO CN** 每日签到积分的 Node.js 脚本。
 
 自包含的单文件脚本，每天自动领取签到积分。零依赖 · 纯标准库 · 跨平台 · 幂等安全 · 多人多账号批量签到。
 
@@ -9,6 +9,7 @@
 ## 特性
 
 - **零依赖**：仅用 Node.js 标准库，16+ 版本即可直接运行。
+- **双产品自动识别**：本机同时装了 Trae CN 与 TRAE SOLO CN 时，自动读取修改时间较新的 `storage.json`，不会误用旧产品的过期凭据。
 - **多人多账号支持**：支持多行 Base64、多 Secret、多本地凭证文件，批量轮流签到并汇总汇报。
 - **智能防风控**：自动解析 Trae 官方客户端 16 位数字 Aha 设备 ID（`iCubeAuthInfo://icube-dc:<id>`），彻底规避 9074（`当前参与用户太多，请稍后再试`）风控拦截。
 - **幂等安全**：先查询状态，未签到才领取，当天重复运行不会多领。
@@ -51,8 +52,14 @@ node signin.js auto
 | `TRAE_STORAGE_DIR` | 本地包含多个 `*.json` 凭据的目录路径 |
 | `TRAE_STORAGE_JSON` | 本地自定义 `storage.json` 文件路径（逗号分隔支持多个） |
 
-本地直接运行默认读取：
-`%APPDATA%\TRAE SOLO CN\User\globalStorage\storage.json`
+本地直接运行默认读取以下两个路径中**修改时间较新**的一个：
+
+| 产品 | 路径 |
+|---|---|
+| Trae CN（新版 IDE，3.x） | `%APPDATA%\Trae CN\User\globalStorage\storage.json` |
+| TRAE SOLO CN（SOLO 客户端） | `%APPDATA%\TRAE SOLO CN\User\globalStorage\storage.json` |
+
+可用 `TRAE_STORAGE_JSON` 显式指定要读哪个文件。
 
 ## GitHub Actions 云端自动化
 
@@ -68,6 +75,8 @@ node signin.js auto
 |---|---|---|
 | `NO_AUTH` | 凭证解密失败或未登录 | 在 Trae 客户端重新登录后重新导出 Base64 |
 | `NO_SESSION` (401/403) | 登录态已过期 | 重新登录 Trae 并更新 GitHub Secret |
+| `NO_SESSION`（code 1001） | 用的是另一个产品的旧凭据（Trae CN 与 TRAE SOLO CN 双装时高发） | 对照上表两条路径，导出最近登录过的那个 |
+| `REFRESH_FAIL 响应中无 Token` | 旧脚本解析不到 `Result.Result.Token` | 更新到最新脚本 |
 | `server_busy` (9074) | 风控拦截 | 当前版本已修复（确保使用最新脚本） |
 | `verify_failed` | 签到奖励未确认 | 检查活动是否仍在开放期 |
 

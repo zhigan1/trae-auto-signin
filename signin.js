@@ -26,11 +26,20 @@ const CONFIG = {
   apiHost: 'api.trae.cn',
   clientId: 'en1oxy7wnw8j9n',
   appVersion: '1.107.1',
+  // 同时支持 Trae CN 与 TRAE SOLO CN 两个产品：取本机存在且最新的 storage.json
   defaultStoragePath: (() => {
+    const candidates = [];
     if (process.env.APPDATA) {
-      return path.join(process.env.APPDATA, 'TRAE SOLO CN', 'User', 'globalStorage', 'storage.json');
+      for (const dir of ['Trae CN', 'TRAE SOLO CN']) {
+        candidates.push(path.join(process.env.APPDATA, dir, 'User', 'globalStorage', 'storage.json'));
+      }
+    } else {
+      for (const dir of ['Trae CN', 'TRAE SOLO CN']) candidates.push(path.join(os.homedir(), '.config', dir, 'storage.json'));
     }
-    return path.join(os.homedir(), '.config', 'TRAE SOLO CN', 'storage.json');
+    const existing = candidates.filter((f) => fs.existsSync(f));
+    if (existing.length === 0) return candidates[0];
+    existing.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+    return existing[0];
   })(),
 };
 
@@ -379,9 +388,17 @@ async function exchangeToken(authInfo, deviceCreds, deviceId) {
   }
 
   const result = JSON.parse(res.body);
-  const token = result.result?.Token || result.Token;
-  const refreshToken = result.result?.RefreshToken || result.RefreshToken;
-  if (!token) throw new Error('REFRESH_FAIL 响应中无 Token');
+  // 服务端实际返回 { ResponseMetadata, Result: { ResponseMetadata, Result: { Token, ... } } }
+  // 旧代码只看 result.result / result.Token，永远取不到 Token，导致刷新必定失败
+  let payload = result;
+  for (let i = 0; i < 4; i++) {
+    if (!payload || typeof payload !== 'object') break;
+    if (payload.Token || payload.token) break;
+    payload = payload.Result || payload.result || payload.data;
+  }
+  const token = payload && (payload.Token || payload.token);
+  const refreshToken = payload && (payload.RefreshToken || payload.refreshToken);
+  if (!token) throw new Error(`REFRESH_FAIL 响应中无 Token: ${res.body.slice(0, 160)}`);
 
   return { token, refreshToken };
 }
@@ -408,7 +425,14 @@ async function checkinStatus(token, deviceId) {
   });
   if (res.status === 401 || res.status === 403) throw new Error('NO_SESSION 登录态已过期，请重新导出凭证');
   if (res.status !== 200) throw new Error(`STATUS_FAIL 查询签到状态失败 (${res.status})`);
-  return JSON.parse(res.body);
+  const body = JSON.parse(res.body);
+  // HTTP 200 但业务码非 0：服务端拒绝认证（如 1001）时，不能当成“签到活动未开启”
+  if (typeof body.code === 'number' && body.code !== 0) {
+    if (body.code === 1001) throw new Error('NO_SESSION 登录态已失效（code 1001），请重新登录 Trae 客户端并重新导出凭证');
+    if (body.code === 9074) throw new Error(`SERVER_BUSY 风控拦截（code 9074）${body.message ? ': ' + body.message : ''}`);
+    throw new Error(`STATUS_FAIL 查询签到状态失败（code ${body.code}）${body.message ? ': ' + body.message : ''}`);
+  }
+  return body;
 }
 
 async function checkinClaim(token, deviceId) {
